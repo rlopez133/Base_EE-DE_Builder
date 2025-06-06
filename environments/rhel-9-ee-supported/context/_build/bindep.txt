@@ -1,8 +1,0 @@
-gcc
-make
-pkg-config
-python3-devel
-systemd-devel
-python3-pip
-shadow-utils
-sudo1
