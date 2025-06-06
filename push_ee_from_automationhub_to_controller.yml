@@ -1,4 +1,4 @@
-i---
+---
 - name: Pull Execution Environments from Automation Hub to Controller
   hosts: localhost
   gather_facts: no
