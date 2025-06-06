@@ -59,3 +59,20 @@
       args:
         chdir: "{{ item.path }}"
       loop: "{{ valid_dirs | from_yaml }}"
+      
+    - name: Find context directories created by ansible-builder
+      find:
+        paths: "{{ item.path }}"
+        patterns: ["context", "_build"]
+        file_type: directory
+      loop: "{{ valid_dirs | from_yaml }}"
+      register: context_dirs
+      
+    - name: Remove context directories
+      file:
+        path: "{{ item.1.path }}"
+        state: absent
+      with_subelements:
+        - "{{ context_dirs.results }}"
+        - files
+      when: context_dirs.results | length > 0
