@@ -70,9 +70,12 @@
       
     - name: Remove context directories
       file:
-        path: "{{ item.1.path }}"
+        path: "{{ item.path }}/context"
         state: absent
-      with_subelements:
-        - "{{ context_dirs.results }}"
-        - files
-      when: context_dirs.results | length > 0
+      loop: "{{ valid_dirs | from_yaml }}"
+
+    - name: Remove _build directories
+      file:
+        path: "{{ item.path }}/_build"
+        state: absent
+      loop: "{{ valid_dirs | from_yaml }}"
