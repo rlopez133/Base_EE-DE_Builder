@@ -10,6 +10,8 @@ export const useEnvironments = () => {
   const [filterType, setFilterType] = useState<string>('all');
   const [filterOS, setFilterOS] = useState<string>('all');
   const [filterTemplateType, setFilterTemplateType] = useState<string>('all');
+  const [selectedEnvDetails, setSelectedEnvDetails] = useState<EnvironmentDetails | null>(null);
+  const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
 
   // Simple API call function (will be replaced with shared service later)
   const apiCall = async (url: string, options?: RequestInit): Promise<any> => {
@@ -101,6 +103,23 @@ export const useEnvironments = () => {
     }
   }, [environments]);
 
+  const handleLoadEnvironmentDetails = useCallback(async (envName: string) => {
+    try {
+      const details = await loadEnvironmentDetails(envName);
+      if (details) {
+        setSelectedEnvDetails(details);
+        setIsDetailsModalOpen(true);
+      }
+    } catch (err: any) {
+      throw new Error(`Failed to load details: ${err.message}`);
+    }
+  }, [loadEnvironmentDetails]);
+  
+  const closeDetailsModal = useCallback(() => {
+    setIsDetailsModalOpen(false);
+    setSelectedEnvDetails(null);
+  }, []);
+
   const handleEnvToggle = useCallback((envName: string, checked: boolean) => {
     if (checked) {
       setSelectedEnvs(prev => [...prev, envName]);
@@ -126,6 +145,8 @@ export const useEnvironments = () => {
     filterOS,
     filterTemplateType,
     filteredEnvironments,
+    selectedEnvDetails,
+    isDetailsModalOpen,
     
     // Setters
     setSelectedEnvs,
@@ -136,6 +157,8 @@ export const useEnvironments = () => {
     // Functions
     loadEnvironments,
     loadEnvironmentDetails,
+    handleLoadEnvironmentDetails,
+    closeDetailsModal,
     handleEnvToggle
   };
 };

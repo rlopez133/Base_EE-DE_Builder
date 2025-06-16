@@ -63,11 +63,9 @@ import {
 } from './types';
 
 const App: React.FC = () => {
-  const [isDetailsModalOpen, setIsDetailsModalOpen] = React.useState(false);
   const [isCustomEEModalOpen, setIsCustomEEModalOpen] = React.useState(false);
   const [isBuildModalOpen, setIsBuildModalOpen] = React.useState(false);
   const [isRHAuthModalOpen, setIsRHAuthModalOpen] = React.useState(false);
-  const [selectedEnvDetails, setSelectedEnvDetails] = React.useState<EnvironmentDetails | null>(null);
   const [dashboardStats, setDashboardStats] = React.useState<DashboardStatsType | null>(null);
   const [buildResult, setBuildResult] = React.useState<{type: 'success' | 'danger' | 'warning' | 'info', message: string} | null>(null);
   const [activeTab, setActiveTab] = React.useState<string | number>(0);
@@ -82,13 +80,17 @@ const App: React.FC = () => {
     filterOS,
     filterTemplateType,
     filteredEnvironments,
+    selectedEnvDetails,
+    isDetailsModalOpen,
     setSelectedEnvs,
     setFilterType,
     setFilterOS,
     setFilterTemplateType,
     loadEnvironments,
     loadEnvironmentDetails,
-    handleEnvToggle
+    handleEnvToggle,
+    handleLoadEnvironmentDetails,
+    closeDetailsModal
   } = useEnvironments();
 
   const {
@@ -425,7 +427,7 @@ const App: React.FC = () => {
               onFilterOSChange={setFilterOS}
               onFilterTemplateTypeChange={setFilterTemplateType}
               onEnvToggle={handleEnvToggle}
-              onLoadEnvironmentDetails={loadEnvironmentDetails}
+              onLoadEnvironmentDetails={handleLoadEnvironmentDetails}
               onRetryConnection={retryConnection}
               getStatusIcon={getStatusIcon}
               getTypeIcon={getTypeIcon}
@@ -453,7 +455,7 @@ const App: React.FC = () => {
       {/* Build Progress Modal */}
       <BuildProgressModal
         isOpen={isBuildModalOpen}
-        onClose={() => setIsBuildModalOpen(false)}
+        onClose={closeDetailsModal}
         building={building}
         currentBuild={currentBuild}
         buildDebugInfo={buildDebugInfo}
@@ -476,7 +478,7 @@ const App: React.FC = () => {
       {/* Environment Details Modal */}
       <EnvironmentDetailsModal
         isOpen={isDetailsModalOpen}
-        onClose={() => setIsDetailsModalOpen(false)}
+        onClose={closeDetailsModal}
         selectedEnvDetails={selectedEnvDetails}
         activeTab={activeTab}
         onTabSelect={(event, tabIndex) => setActiveTab(tabIndex)}

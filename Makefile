@@ -1,7 +1,7 @@
 # EE-DE Builder Makefile
 # Automates development environment setup and common tasks
 
-.PHONY: help setup dev backend frontend install-backend install-frontend clean test build stop health check-deps move-requirements
+.PHONY: help setup dev backend frontend install-backend install-frontend clean test build stop health check-deps verify-requirements status quick-start
 
 # Default target
 .DEFAULT_GOAL := help
@@ -28,7 +28,7 @@ help:
 	@echo "  setup              Complete project setup (recommended for first time)"
 	@echo "  install-backend    Install Python backend dependencies"
 	@echo "  install-frontend   Install Node.js frontend dependencies"
-	@echo "  move-requirements  Move backend requirements.txt to root and cleanup"
+	@echo "  verify-requirements  Verify requirements.txt setup is correct"
 	@echo ""
 	@echo "$(YELLOW)Development Commands:$(NC)"
 	@echo "  dev                Start both backend and frontend servers"
@@ -38,6 +38,7 @@ help:
 	@echo ""
 	@echo "$(YELLOW)Utility Commands:$(NC)"
 	@echo "  health             Check service health"
+	@echo "  status             Show development environment status"
 	@echo "  test               Run tests"
 	@echo "  build              Build frontend for production"
 	@echo "  clean              Clean build artifacts and stop servers"
@@ -47,7 +48,7 @@ help:
 	@echo "  make setup && make dev"
 
 ## Complete project setup
-setup: check-deps move-requirements install-backend install-frontend
+setup: check-deps verify-requirements install-backend install-frontend
 	@echo "$(GREEN)✅ Setup complete! Run 'make dev' to start development servers$(NC)"
 
 ## Check if required dependencies are installed
@@ -65,21 +66,16 @@ check-deps:
 	fi
 	@echo "$(GREEN)✅ All required dependencies found$(NC)"
 
-## Move backend requirements.txt to root and remove artifact version
-move-requirements:
-	@echo "$(YELLOW)Moving requirements.txt to root directory...$(NC)"
-	@if [ -f "$(BACKEND_DIR)/requirements.txt" ]; then \
-		cp "$(BACKEND_DIR)/requirements.txt" ./requirements.txt; \
-		echo "$(GREEN)✅ Moved backend/requirements.txt to root$(NC)"; \
+## Verify requirements.txt setup is correct
+verify-requirements:
+	@echo "$(YELLOW)Verifying requirements.txt setup...$(NC)"
+	@if [ -f "requirements.txt" ]; then \
+		echo "$(GREEN)✅ Root requirements.txt exists$(NC)"; \
 	else \
-		echo "$(RED)❌ Backend requirements.txt not found$(NC)"; \
+		echo "$(RED)❌ Root requirements.txt missing$(NC)"; \
 		exit 1; \
 	fi
-	@if [ -f "artifact/requirements.txt" ]; then \
-		echo "$(YELLOW)⚠️  Removing redundant artifact/requirements.txt$(NC)"; \
-		rm -f artifact/requirements.txt; \
-		echo "$(GREEN)✅ Removed artifact/requirements.txt$(NC)"; \
-	fi
+	@echo "$(GREEN)✅ Requirements setup is correct$(NC)"
 
 ## Install Python backend dependencies
 install-backend:
@@ -165,9 +161,9 @@ health:
 ## Run tests
 test:
 	@echo "$(YELLOW)Running backend tests...$(NC)"
-	@. $(VENV_DIR)/bin/activate && cd $(BACKEND_DIR) && python -m pytest tests/ -v || echo "$(YELLOW)⚠️  No backend tests found$(NC)"
+	@. $(VENV_DIR)/bin/activate && cd $(BACKEND_DIR) && python -m pytest tests/ -v 2>/dev/null || echo "$(YELLOW)⚠️  No backend tests found$(NC)"
 	@echo "$(YELLOW)Running frontend tests...$(NC)"
-	@cd $(FRONTEND_DIR) && npm test -- --coverage --passWithNoTests
+	@cd $(FRONTEND_DIR) && npm test -- --coverage --passWithNoTests --watchAll=false
 
 ## Build frontend for production
 build:
@@ -201,14 +197,6 @@ clean-all: clean
 		echo "$(YELLOW)Aborted$(NC)"; \
 	fi
 
-## Development server logs
-logs:
-	@echo "$(YELLOW)Showing recent logs...$(NC)"
-	@echo "$(GREEN)=== Backend Logs ===$(NC)"
-	@tail -f /tmp/ee-de-builder-backend.log 2>/dev/null || echo "No backend logs found"
-	@echo "$(GREEN)=== Frontend Logs ===$(NC)"  
-	@tail -f /tmp/ee-de-builder-frontend.log 2>/dev/null || echo "No frontend logs found"
-
 ## Show development environment status
 status:
 	@echo "$(GREEN)=== EE-DE Builder Status ===$(NC)"
@@ -229,7 +217,7 @@ status:
 	else \
 		echo "$(RED)❌ Root requirements.txt missing$(NC)"; \
 	fi
-	@if [ -f "$(FRONTEND_DIR)/node_modules/package.json" ]; then \
+	@if [ -d "$(FRONTEND_DIR)/node_modules" ]; then \
 		echo "$(GREEN)✅ Frontend dependencies installed$(NC)"; \
 	else \
 		echo "$(RED)❌ Frontend dependencies not installed$(NC)"; \
@@ -264,4 +252,3 @@ quick-start: setup
 	@echo "• $(GREEN)make stop$(NC)     - Stop all development servers"
 	@echo "• $(GREEN)make clean$(NC)    - Clean build artifacts"
 	@echo ""
-	@echo "$(GREEN)Happy coding! 🚀$(NC)"
