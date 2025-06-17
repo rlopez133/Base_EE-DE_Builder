@@ -39,6 +39,16 @@ class Settings(BaseSettings):
     MAX_CONCURRENT_BUILDS: int = 3
     BUILD_TIMEOUT_MINUTES: int = 30
     
+    # Export Configuration
+    EXPORT_CLEANUP_HOURS: int = 2  # Hours to keep export files
+    EXPORT_TEMP_DIR: str = "/tmp/ee_exports"  # Directory for export files
+    MAX_EXPORT_FILE_SIZE_GB: int = 10  # Maximum export file size
+    
+    # Registry Configuration  
+    DEFAULT_REGISTRY_URL: str = "quay.io"
+    REGISTRY_TIMEOUT_MINUTES: int = 15  # Timeout for registry operations
+    MAX_CONCURRENT_PUSHES: int = 2  # Maximum concurrent pushes
+    
     # Red Hat Registry
     RH_REGISTRY_URL: str = "registry.redhat.io"
     

@@ -8,6 +8,7 @@ import RHAuthModal from './components/modals/RHAuthModal';
 import EnvironmentDetailsModal from './components/modals/EnvironmentDetailsModal';
 import CustomEEWizardModal from './components/modals/CustomEEWizardModal';
 import BuildProgressModal from './components/modals/BuildProgressModal';
+import EEOperationsModal from './components/modals/EEOperationsModal';
 import EnvironmentList from './components/environments/EnvironmentList';
 import AppHeader from './components/layout/AppHeader';
 import BuildControl from './components/builds/BuildControl';
@@ -38,7 +39,11 @@ import {
   DescriptionList,
   DescriptionListGroup,
   DescriptionListTerm,
-  DescriptionListDescription
+  DescriptionListDescription,
+  Button,
+  Card,
+  CardBody,
+  CardTitle
 } from '@patternfly/react-core';
 
 import { 
@@ -52,7 +57,8 @@ import {
   PficonTemplateIcon,
   ExclamationCircleIcon,
   DisconnectedIcon,
-  KeyIcon
+  KeyIcon,
+  CloudUploadAltIcon
 } from '@patternfly/react-icons';
 
 import {
@@ -66,6 +72,7 @@ const App: React.FC = () => {
   const [isCustomEEModalOpen, setIsCustomEEModalOpen] = React.useState(false);
   const [isBuildModalOpen, setIsBuildModalOpen] = React.useState(false);
   const [isRHAuthModalOpen, setIsRHAuthModalOpen] = React.useState(false);
+  const [isEEOperationsModalOpen, setIsEEOperationsModalOpen] = React.useState(false);
   const [dashboardStats, setDashboardStats] = React.useState<DashboardStatsType | null>(null);
   const [buildResult, setBuildResult] = React.useState<{type: 'success' | 'danger' | 'warning' | 'info', message: string} | null>(null);
   const [activeTab, setActiveTab] = React.useState<string | number>(0);
@@ -448,6 +455,21 @@ const App: React.FC = () => {
               onOpenRHAuthModal={() => setIsRHAuthModalOpen(true)}
               getConnectionStatusIcon={getConnectionStatusIcon}
             />
+            
+            {/* EE Operations Card */}
+            <Card style={{ marginTop: '1rem' }}>
+              <CardTitle>EE Operations</CardTitle>
+              <CardBody>
+                <Button
+                  variant="secondary"
+                  onClick={() => setIsEEOperationsModalOpen(true)}
+                  icon={<CloudUploadAltIcon />}
+                  isBlock
+                >
+                  Export & Push EE Images
+                </Button>
+              </CardBody>
+            </Card>
           </GridItem>
         </Grid>
       </PageSection>
@@ -455,7 +477,7 @@ const App: React.FC = () => {
       {/* Build Progress Modal */}
       <BuildProgressModal
         isOpen={isBuildModalOpen}
-        onClose={closeDetailsModal}
+        onClose={() => setIsBuildModalOpen(false)} 
         building={building}
         currentBuild={currentBuild}
         buildDebugInfo={buildDebugInfo}
@@ -509,6 +531,12 @@ const App: React.FC = () => {
         generateRequirementsTxt={generateRequirementsTxt}
         generateRequirementsYml={generateRequirementsYml}
         generateBindepTxt={generateBindepTxt}
+      />
+
+      {/* EE Operations Modal */}
+      <EEOperationsModal
+        isOpen={isEEOperationsModalOpen}
+        onClose={() => setIsEEOperationsModalOpen(false)}
       />
     </Page>
   );
