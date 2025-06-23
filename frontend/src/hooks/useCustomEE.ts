@@ -5,7 +5,7 @@ import { BaseImage, PackageTemplates, CustomEEForm } from '../types';
 export const useCustomEE = () => {
   // State extracted from App.tsx
   const [isCustomEEWizardOpen, setIsCustomEEWizardOpen] = useState(false);
-  const [customEEStep, setCustomEEStep] = useState(0);
+  const [customEEStep, setCustomEEStep] = useState(1); // FIXED: Start at 1, not 0
   const [availableBaseImages, setAvailableBaseImages] = useState<Record<string, BaseImage>>({});
   const [packageTemplates, setPackageTemplates] = useState<PackageTemplates | null>(null);
   const [customEEForm, setCustomEEForm] = useState<CustomEEForm>({
@@ -18,7 +18,7 @@ export const useCustomEE = () => {
     system_packages: [],
     ansible_collections: [],
     additional_build_steps: '',
-    import_mode: '',
+    import_mode: 'wizard', // FIXED: Default to 'wizard' mode
     yaml_content: ''
   });
 
@@ -126,17 +126,15 @@ export const useCustomEE = () => {
   const getStepTitle = useCallback((step: number) => {
     if (customEEForm.import_mode === 'yaml') {
       switch (step) {
-        case 0: return 'Import YAML Configuration';
-        case 1: return 'Review & Create';
+        case 1: return 'Import YAML Configuration';
+        case 2: return 'Review & Create';
         default: return 'Custom EE Import';
       }
     } else {
       switch (step) {
-        case 0: return 'Basic Information';
-        case 1: return 'Python Packages';
-        case 2: return 'System Packages';
-        case 3: return 'Ansible Collections';
-        case 4: return 'Review & Create';
+        case 1: return 'Basic Information';
+        case 2: return 'Package Configuration';
+        case 3: return 'Build Destination';
         default: return 'Custom EE Wizard';
       }
     }
@@ -153,10 +151,10 @@ export const useCustomEE = () => {
       system_packages: [],
       ansible_collections: [],
       additional_build_steps: '',
-      import_mode: '', // This ensures we go back to mode selection
+      import_mode: 'wizard', // FIXED: Reset to 'wizard' mode, not empty
       yaml_content: ''
     });
-    setCustomEEStep(0); // Reset to first step
+    setCustomEEStep(1); // FIXED: Reset to step 1, not 0
   }, []);
 
   const extractBaseImageFromYAML = useCallback((yamlContent: string): string => {
@@ -205,12 +203,12 @@ export const useCustomEE = () => {
   const canProceedToNextStep = useCallback((step: number, rhAuthStatus: string): boolean => {
     if (customEEForm.import_mode === 'yaml') {
       switch (step) {
-        case 0: 
+        case 1: 
           // YAML mode: name must be lowercase and not empty, YAML content required
           const nameValid = customEEForm.name.trim() !== '' && customEEForm.name === customEEForm.name.toLowerCase();
           const yamlValid = customEEForm.yaml_content.trim() !== '';
           return nameValid && yamlValid;
-        case 1: 
+        case 2: 
           // Final step for YAML mode: check Red Hat registry authentication if needed
           const finalBaseImage = extractBaseImageFromYAML(customEEForm.yaml_content);
           const isRedHatRegistry = finalBaseImage?.includes('registry.redhat.io');
@@ -221,17 +219,17 @@ export const useCustomEE = () => {
         default: return false;
       }
     } else if (customEEForm.import_mode === 'wizard') {
-      // Wizard mode logic
+      // Wizard mode logic - FIXED: Updated step numbers to match wizard
       switch (step) {
-        case 0: 
+        case 1: 
           // Basic info: name must be lowercase and not empty, base image must be selected
           const nameValid = customEEForm.name.trim() !== '' && customEEForm.name === customEEForm.name.toLowerCase();
           const baseImageValid = customEEForm.use_custom_base_image ? 
             customEEForm.custom_base_image.trim() !== '' : 
             customEEForm.base_image !== '';
           return nameValid && baseImageValid;
-        case 1: case 2: case 3: return true; // Optional steps
-        case 4: 
+        case 2: return true; // Package configuration step - optional
+        case 3: 
           // Final step: check Red Hat registry authentication if needed
           const finalBaseImage = customEEForm.use_custom_base_image ? 
             customEEForm.custom_base_image : 
@@ -253,51 +251,78 @@ export const useCustomEE = () => {
 
   // Generate YAML preview based on current form state
   const generateYAMLPreview = useCallback(() => {
-    const finalBaseImage = customEEForm.use_custom_base_image ? 
-      customEEForm.custom_base_image : 
-      customEEForm.base_image || 'registry.redhat.io/ansible-automation-platform-25/ee-minimal-rhel9:latest';
-      
-    const yaml: any = {
-      version: 3,
-      images: {
-        base_image: {
-          name: finalBaseImage
-        }
-      },
-      dependencies: {
-        python_interpreter: {
-          package_system: "python3"
+    try {
+      const finalBaseImage = customEEForm.use_custom_base_image ? 
+        customEEForm.custom_base_image : 
+        customEEForm.base_image || 'registry.redhat.io/ansible-automation-platform-25/ee-minimal-rhel9:latest';
+        
+      const yamlObj: any = {
+        version: 3,
+        images: {
+          base_image: {
+            name: finalBaseImage
+          }
         },
-        ansible_core: {
-          package_pip: "ansible-core"
-        },
-        ansible_runner: {
-          package_pip: "ansible-runner"
+        dependencies: {
+          python_interpreter: {
+            package_system: "python3"
+          },
+          ansible_core: {
+            package_pip: "ansible-core"
+          },
+          ansible_runner: {
+            package_pip: "ansible-runner"
+          }
         }
+      };
+
+      // Add system packages (always include openssh-clients, sshpass as basics)
+      const systemPackages = ['openssh-clients', 'sshpass', ...customEEForm.system_packages];
+      if (systemPackages.length > 0) {
+        yamlObj.dependencies.system = Array.from(new Set(systemPackages)); // Remove duplicates
       }
-    };
 
-    // Add system packages (always include openssh-clients, sshpass as basics)
-    const systemPackages = ['openssh-clients', 'sshpass', ...customEEForm.system_packages];
-    if (systemPackages.length > 0) {
-      yaml.dependencies.system = Array.from(new Set(systemPackages)); // Remove duplicates
+      // Add Python packages
+      if (customEEForm.python_packages.length > 0) {
+        yamlObj.dependencies.python = 'requirements.txt';
+      }
+
+      // Add Ansible collections
+      if (customEEForm.ansible_collections.length > 0) {
+        yamlObj.dependencies.galaxy = 'requirements.yml';
+      }
+
+      if (customEEForm.additional_build_steps.trim()) {
+        yamlObj.additional_build_steps = customEEForm.additional_build_steps.trim();
+      }
+
+      // Convert to YAML string - simple manual conversion since we don't have js-yaml
+      const convertToYaml = (obj: any, indent = 0): string => {
+        const spaces = '  '.repeat(indent);
+        let result = '';
+        
+        for (const [key, value] of Object.entries(obj)) {
+          if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+            result += `${spaces}${key}:\n`;
+            result += convertToYaml(value, indent + 1);
+          } else if (Array.isArray(value)) {
+            result += `${spaces}${key}:\n`;
+            value.forEach(item => {
+              result += `${spaces}  - ${item}\n`;
+            });
+          } else {
+            result += `${spaces}${key}: ${value}\n`;
+          }
+        }
+        return result;
+      };
+
+      const yamlString = convertToYaml(yamlObj);
+      return yamlString;
+    } catch (error) {
+      console.error('Error generating YAML preview:', error);
+      return 'Error generating YAML preview';
     }
-
-    // Add Python packages
-    if (customEEForm.python_packages.length > 0) {
-      yaml.dependencies.python = 'requirements.txt';
-    }
-
-    // Add Ansible collections
-    if (customEEForm.ansible_collections.length > 0) {
-      yaml.dependencies.galaxy = 'requirements.yml';
-    }
-
-    if (customEEForm.additional_build_steps.trim()) {
-      yaml.additional_build_steps = customEEForm.additional_build_steps.trim();
-    }
-
-    return yaml;
   }, [customEEForm]);
 
   const generateRequirementsTxt = useCallback(() => {

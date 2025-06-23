@@ -8,7 +8,6 @@ import RHAuthModal from './components/modals/RHAuthModal';
 import EnvironmentDetailsModal from './components/modals/EnvironmentDetailsModal';
 import CustomEEWizardModal from './components/modals/CustomEEWizardModal';
 import BuildProgressModal from './components/modals/BuildProgressModal';
-import EEOperationsModal from './components/modals/EEOperationsModal';
 import EnvironmentList from './components/environments/EnvironmentList';
 import AppHeader from './components/layout/AppHeader';
 import BuildControl from './components/builds/BuildControl';
@@ -57,22 +56,23 @@ import {
   PficonTemplateIcon,
   ExclamationCircleIcon,
   DisconnectedIcon,
-  KeyIcon,
-  CloudUploadAltIcon
+  KeyIcon
 } from '@patternfly/react-icons';
 
 import {
   Environment,
   EnvironmentDetails,
   Build,
-  DashboardStats as DashboardStatsType
+  DashboardStats as DashboardStatsType,
+  CustomEEForm
 } from './types';
+
+import { EnhancedBuildRequest } from './types/BuildDestination';
 
 const App: React.FC = () => {
   const [isCustomEEModalOpen, setIsCustomEEModalOpen] = React.useState(false);
   const [isBuildModalOpen, setIsBuildModalOpen] = React.useState(false);
   const [isRHAuthModalOpen, setIsRHAuthModalOpen] = React.useState(false);
-  const [isEEOperationsModalOpen, setIsEEOperationsModalOpen] = React.useState(false);
   const [dashboardStats, setDashboardStats] = React.useState<DashboardStatsType | null>(null);
   const [buildResult, setBuildResult] = React.useState<{type: 'success' | 'danger' | 'warning' | 'info', message: string} | null>(null);
   const [activeTab, setActiveTab] = React.useState<string | number>(0);
@@ -154,6 +154,24 @@ const App: React.FC = () => {
     previousStep,
     updateFormField
   } = useCustomEE();
+
+  // Initialize customEEForm with defaults if not already initialized
+  const getDefaultCustomEEForm = (): CustomEEForm => ({
+    name: '',
+    description: '',
+    base_image: '',
+    custom_base_image: '',
+    use_custom_base_image: false,
+    python_packages: [],
+    system_packages: [],
+    ansible_collections: [],
+    additional_build_steps: '',
+    import_mode: 'wizard',
+    yaml_content: ''
+  });
+
+  // Ensure customEEForm has default values
+  const safeCustomEEForm = customEEForm || getDefaultCustomEEForm();
  
   // Enhanced API call with better error handling                               
   const apiCall = async (url: string, options?: RequestInit): Promise<any> => { 
@@ -185,25 +203,129 @@ const App: React.FC = () => {
     }                                                                           
   }; 
 
-  // Custom EE creation handler
-  const handleCreateCustomEE = async () => {
-    try {
-      const result = await createCustomEE(rhAuthStatus, startCustomEEBuild, loadEnvironments);
-      setBuildResult({ type: 'success', message: result.message });
-      closeWizard();
-      if (result.build_id) {
-        setIsBuildModalOpen(true);
-      }
-    } catch (err: any) {
-      if (err.message.includes('Red Hat registry authentication required')) {
+  // Enhanced build handler - now accepts EnhancedBuildRequest from the wizard
+  const handleEnhancedStartBuild = async (buildRequest: EnhancedBuildRequest) => {
+    // Check if we need RH authentication based on the environments in the request
+    const needsRHAuth = isAuthRequired(buildRequest.environments);
+
+    if (needsRHAuth && rhAuthStatus !== 'authenticated') {
+      setBuildResult({ 
+        type: 'warning', 
+        message: 'Selected environments require Red Hat registry authentication. Please login first.' 
+      });
+      setIsRHAuthModalOpen(true);
+      return;
+    }
+
+    // Additional validation for push destinations
+    if (buildRequest.destinations.push?.enabled) {
+      const pushConfig = buildRequest.destinations.push;
+      const needsRHAuthForRegistry = pushConfig.registryUrl?.includes('registry.redhat.io');
+      
+      if (needsRHAuthForRegistry && rhAuthStatus !== 'authenticated') {
         setBuildResult({ 
           type: 'warning', 
-          message: 'Selected environments require Red Hat registry authentication. Please login first.' 
+          message: 'Red Hat registry push requires authentication. Please login first.' 
         });
         setIsRHAuthModalOpen(true);
-      } else {
-        setBuildResult({ type: 'danger', message: `❌ ${err.message}` });
+        return;
       }
+    }
+
+    try {
+      setBuildResult(null);
+      setIsBuildModalOpen(true);
+      
+      // Call the enhanced start build API with the full build request
+      const response = await apiCall('/api/builds/start', {
+        method: 'POST',
+        body: JSON.stringify(buildRequest)
+      });
+      
+      setBuildResult({ type: 'success', message: `Build started: ${response.build_id}` });
+      
+      // Update current build state for the progress modal
+      setCurrentBuild({
+        id: response.build_id,
+        status: 'starting',
+        environments: buildRequest.environments,
+        started_at: new Date().toISOString(),
+        logs: [],
+        images: [],
+        errors: []
+      });
+      
+      setBuilding(true);
+      
+    } catch (err: any) {
+      setBuildResult({ type: 'danger', message: `Failed to start build: ${err.message}` });
+      setIsBuildModalOpen(false);
+    }
+  };
+
+  // Custom EE creation handler - FIXED to properly handle the custom EE name
+  const handleCreateCustomEE = async (buildRequest: EnhancedBuildRequest) => {
+    try {
+      setBuildResult(null);
+      setIsBuildModalOpen(true);
+      
+      // Create the custom EE first
+      const createResponse = await apiCall('/api/custom-ee/create', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: safeCustomEEForm.name,
+          description: safeCustomEEForm.description,
+          base_image: safeCustomEEForm.base_image,
+          python_packages: safeCustomEEForm.python_packages,
+          system_packages: safeCustomEEForm.system_packages,
+          ansible_collections: safeCustomEEForm.ansible_collections
+        })
+      });
+
+      if (!createResponse.success) {
+        throw new Error(createResponse.message || 'Failed to create custom EE');
+      }
+      
+      // Create a new build request with the newly created custom EE name
+      const customEEBuildRequest: EnhancedBuildRequest = {
+        ...buildRequest,
+        environments: [createResponse.data?.name || safeCustomEEForm.name] // Use the created EE name
+      };
+      
+      // Then start the build with the custom EE
+      const buildResponse = await apiCall('/api/builds/start', {
+        method: 'POST',
+        body: JSON.stringify(customEEBuildRequest)
+      });
+      
+      setBuildResult({ 
+        type: 'success', 
+        message: `Custom EE "${safeCustomEEForm.name}" created and build started: ${buildResponse.build_id}` 
+      });
+      
+      // Update current build state
+      setCurrentBuild({
+        id: buildResponse.build_id,
+        status: 'starting',
+        environments: customEEBuildRequest.environments,
+        started_at: new Date().toISOString(),
+        logs: [],
+        images: [],
+        errors: []
+      });
+      
+      setBuilding(true);
+      closeWizard();
+      
+      // Reset the form for next use
+      resetCustomEEForm();
+      
+      // Reload environments to show the new custom EE
+      await loadEnvironments();
+      
+    } catch (err: any) {
+      setBuildResult({ type: 'danger', message: `Failed to create custom EE: ${err.message}` });
+      setIsBuildModalOpen(false);
     }
   };
 
@@ -237,35 +359,6 @@ const App: React.FC = () => {
     await loadDashboardStats();
     await checkRHAuthStatus();
     setBuildResult({ type: 'success', message: 'Environments reloaded!' });
-  };
-
-  const handleStartBuild = async () => {
-    if (selectedEnvs.length === 0) {
-      setBuildResult({ type: 'danger', message: 'Please select at least one environment' });
-      return;
-    }
-  
-    // Check if we need RH authentication
-    const needsRHAuth = isAuthRequired(selectedEnvs);
-
-    if (needsRHAuth && rhAuthStatus !== 'authenticated') {
-      setBuildResult({ 
-        type: 'warning', 
-        message: 'Selected environments require Red Hat registry authentication. Please login first.' 
-      });
-      setIsRHAuthModalOpen(true);
-      return;
-    }
-  
-    try {
-      setBuildResult(null);
-      setIsBuildModalOpen(true);
-      const result = await startBuild(selectedEnvs); // This now comes from the hook
-      setBuildResult({ type: 'success', message: `Build started: ${result.build_id}` });
-    } catch (err: any) {
-      setBuildResult({ type: 'danger', message: `Failed to start build: ${err.message}` });
-      setIsBuildModalOpen(false);
-    }
   };
 
   // Connection retry logic
@@ -450,26 +543,11 @@ const App: React.FC = () => {
               connectionStatus={connectionStatus}
               building={building}
               environmentsCount={environments.length}
-              onStartBuild={handleStartBuild}
+              onStartBuild={handleEnhancedStartBuild}
               onLogoutFromRH={logoutFromRH}
               onOpenRHAuthModal={() => setIsRHAuthModalOpen(true)}
               getConnectionStatusIcon={getConnectionStatusIcon}
             />
-            
-            {/* EE Operations Card */}
-            <Card style={{ marginTop: '1rem' }}>
-              <CardTitle>EE Operations</CardTitle>
-              <CardBody>
-                <Button
-                  variant="secondary"
-                  onClick={() => setIsEEOperationsModalOpen(true)}
-                  icon={<CloudUploadAltIcon />}
-                  isBlock
-                >
-                  Export & Push EE Images
-                </Button>
-              </CardBody>
-            </Card>
           </GridItem>
         </Grid>
       </PageSection>
@@ -507,36 +585,49 @@ const App: React.FC = () => {
         getTypeColor={getTypeColor}
       />
 
-      {/* Custom EE Wizard Modal */}
+      {/* Custom EE Wizard Modal - FIXED PROPS */}
       <CustomEEWizardModal
         isOpen={isCustomEEWizardOpen}
         onClose={closeWizard}
         customEEStep={customEEStep}
-        customEEForm={customEEForm}
-        availableBaseImages={availableBaseImages}
-        packageTemplates={packageTemplates}
+        customEEForm={safeCustomEEForm}
+        availableBaseImages={Object.keys(availableBaseImages || {})}
+        packageTemplates={packageTemplates ? Object.values(packageTemplates).flat() : []}
         rhAuthStatus={rhAuthStatus}
         onSetIsRHAuthModalOpen={setIsRHAuthModalOpen}
         onCreateCustomEE={handleCreateCustomEE}
         getStepTitle={getStepTitle}
-        canProceedToNextStep={canProceedToNextStep}
+        canProceedToNextStep={(step: number) => canProceedToNextStep(step, rhAuthStatus)}
         nextStep={nextStep}
         previousStep={previousStep}
-        updateFormField={updateFormField}
-        addPackageFromTemplate={addPackageFromTemplate}
-        addCustomPackage={addCustomPackage}
-        removePackage={removePackage}
+        updateFormField={(field: string, value: any) => {
+          const validFields: (keyof CustomEEForm)[] = ['name', 'description', 'base_image', 'python_packages', 'system_packages', 'ansible_collections'];
+          if (validFields.includes(field as keyof CustomEEForm)) {
+            updateFormField(field as keyof CustomEEForm, value);
+          }
+        }}
+        addPackageFromTemplate={(template: any) => addPackageFromTemplate('python_packages', template.name)}
+        addCustomPackage={(type: 'python' | 'system' | 'ansible', packageName: string) => {
+          const typeMap = {
+            'python': 'python_packages',
+            'system': 'system_packages', 
+            'ansible': 'ansible_collections'
+          } as const;
+          addCustomPackage(typeMap[type], packageName);
+        }}
+        removePackage={(type: 'python' | 'system' | 'ansible', index: number) => {
+          const typeMap = {
+            'python': 'python_packages',
+            'system': 'system_packages',
+            'ansible': 'ansible_collections'
+          } as const;
+          removePackage(typeMap[type], String(index));
+        }}
         extractBaseImageFromYAML={extractBaseImageFromYAML}
         generateYAMLPreview={generateYAMLPreview}
         generateRequirementsTxt={generateRequirementsTxt}
-        generateRequirementsYml={generateRequirementsYml}
+        generateRequirementsYml={() => JSON.stringify(generateRequirementsYml(), null, 2)}
         generateBindepTxt={generateBindepTxt}
-      />
-
-      {/* EE Operations Modal */}
-      <EEOperationsModal
-        isOpen={isEEOperationsModalOpen}
-        onClose={() => setIsEEOperationsModalOpen(false)}
       />
     </Page>
   );
