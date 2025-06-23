@@ -133,8 +133,10 @@ export const useCustomEE = () => {
     } else {
       switch (step) {
         case 1: return 'Basic Information';
-        case 2: return 'Package Configuration';
-        case 3: return 'Build Destination';
+        case 2: return 'Python Packages';
+        case 3: return 'System Packages';
+        case 4: return 'Ansible Collections';
+        case 5: return 'Build Destination';
         default: return 'Custom EE Wizard';
       }
     }
@@ -219,7 +221,7 @@ export const useCustomEE = () => {
         default: return false;
       }
     } else if (customEEForm.import_mode === 'wizard') {
-      // Wizard mode logic - FIXED: Updated step numbers to match wizard
+      // Wizard mode logic - Updated for 5-step process
       switch (step) {
         case 1: 
           // Basic info: name must be lowercase and not empty, base image must be selected
@@ -228,8 +230,8 @@ export const useCustomEE = () => {
             customEEForm.custom_base_image.trim() !== '' : 
             customEEForm.base_image !== '';
           return nameValid && baseImageValid;
-        case 2: return true; // Package configuration step - optional
-        case 3: 
+        case 2: case 3: case 4: return true; // Package steps - optional
+        case 5: 
           // Final step: check Red Hat registry authentication if needed
           const finalBaseImage = customEEForm.use_custom_base_image ? 
             customEEForm.custom_base_image : 

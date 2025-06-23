@@ -592,7 +592,7 @@ const App: React.FC = () => {
         customEEStep={customEEStep}
         customEEForm={safeCustomEEForm}
         availableBaseImages={Object.keys(availableBaseImages || {})}
-        packageTemplates={packageTemplates ? Object.values(packageTemplates).flat() : []}
+        packageTemplates={packageTemplates}
         rhAuthStatus={rhAuthStatus}
         onSetIsRHAuthModalOpen={setIsRHAuthModalOpen}
         onCreateCustomEE={handleCreateCustomEE}
@@ -606,22 +606,21 @@ const App: React.FC = () => {
             updateFormField(field as keyof CustomEEForm, value);
           }
         }}
-        addPackageFromTemplate={(template: any) => addPackageFromTemplate('python_packages', template.name)}
-        addCustomPackage={(type: 'python' | 'system' | 'ansible', packageName: string) => {
-          const typeMap = {
-            'python': 'python_packages',
-            'system': 'system_packages', 
-            'ansible': 'ansible_collections'
-          } as const;
-          addCustomPackage(typeMap[type], packageName);
+        addPackageFromTemplate={(template: any) => {
+          // Map template type to the correct package array
+          if (customEEStep === 2) {
+            addPackageFromTemplate('python_packages', template.name);
+          } else if (customEEStep === 3) {
+            addPackageFromTemplate('system_packages', template.name);
+          } else if (customEEStep === 4) {
+            addPackageFromTemplate('ansible_collections', template.name);
+          }
         }}
-        removePackage={(type: 'python' | 'system' | 'ansible', index: number) => {
-          const typeMap = {
-            'python': 'python_packages',
-            'system': 'system_packages',
-            'ansible': 'ansible_collections'
-          } as const;
-          removePackage(typeMap[type], String(index));
+        addCustomPackage={(type: 'python_packages' | 'system_packages' | 'ansible_collections', packageName: string) => {
+          addCustomPackage(type, packageName);
+        }}
+        removePackage={(type: 'python_packages' | 'system_packages' | 'ansible_collections', packageName: string) => {
+          removePackage(type, packageName);
         }}
         extractBaseImageFromYAML={extractBaseImageFromYAML}
         generateYAMLPreview={generateYAMLPreview}
